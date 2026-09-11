@@ -1,0 +1,2 @@
+"""Checkout status SMS service."""
+

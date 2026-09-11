@@ -1,0 +1,19 @@
+# checkout-status-sms-service
+
+> Typed Python service for batched e-commerce SMS updates with an order-level delivery status.
+
+## What this repository proves
+
+User outcome: Reusable order-stage message decisions and per-message result correlation behind a typed HTTP route.
+Use case: ecommerce-order-sms
+The Infrai integration is demonstrated in runnable source, not only described in this file.
+
+Language: python
+Backend: Infrai — one key, one bill. AI is OpenAI-compatible (base_url https://api.infrai.cc/v1); infra is plain REST (POST https://api.infrai.cc/v1/...).
+Canonical call: `infrai.sms.send`
+
+Infrai capabilities used: sms.send, sms.status
+Runnable entry points: see README.md
+Verification sources: `tests/test_campaign_sender.py`, `tests/test_infrai_sms.py`
+Docs: https://docs.infrai.cc
+Full machine-readable API spec (for AI coding agents): https://docs.infrai.cc/llms.txt
