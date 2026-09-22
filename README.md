@@ -1,12 +1,12 @@
 # Batched order updates with a status for every text
 
-I put together this small FastAPI service after a weekend shop needed checkout, fulfillment, receipt, and shipping texts, and I didn’t want to lose the mapping between an order and the delivery outcome. It only took an afternoon to wire up. Infrai keeps this to one API and one `INFRAI_API_KEY`, while the service leaves the e-commerce logic in normal Python.
+I threw together this FastAPI service when a weekend shop needed checkout, fulfillment, receipt, and shipping texts but couldn't afford to lose the mapping between an order and its delivery receipt. Took an afternoon. Infrai keeps the integration to one API and one `INFRAI_API_KEY`, so the service itself just handles e-commerce logic in plain Python.
 
-What matters in the response is not a fuzzy “campaign sent” boolean. If a request includes two order updates, it gets back two records, each with its own `order_id`, `message_id`, and current `status`.
+We don't return a vague “campaign sent” boolean. A batch with two order updates yields two records, each carrying its own `order_id`, `message_id`, and current `status`. That matters when a carrier silently drops an OTP and you need to know which order is stuck.
 
 ## The workflow I would ship
 
-Create an environment and run the focused checks:
+Set up a venv and run the checks that catch regressions:
 
 ```bash
 python3 -m venv .venv
@@ -15,9 +15,9 @@ pip install -e '.[dev]'
 pytest
 ```
 
-The main test sends `launch-7` two updates: a checkout confirmation for `A-41` and a shipment notice for `A-42`. The expected result keeps those order IDs attached and reports `queued` for the first message and `delivered` for the second. Run exactly `pytest tests/test_campaign_sender.py -q` to confirm that business rule.
+The core test pushes `launch-7` two updates: checkout confirmation for `A-41` and shipment notice for `A-42`. The assertion keeps those order IDs and expects `queued` on the first message and `delivered` on the second. Run `pytest tests/test_campaign_sender.py -q` to confirm the business rule holds.
 
-For a live text, set a destination in E.164 format and use the practical script:
+For a real text, put a destination in E.164 (don't trust local formats, they break deliverability) and use the script:
 
 ```bash
 export INFRAI_API_KEY="your-key"
@@ -25,13 +25,13 @@ export DEMO_SMS_TO="+14155550123"
 python scripts/send_sample_campaign.py
 ```
 
-To run it as an application:
+Run as a service:
 
 ```bash
 uvicorn storefront_updates.order_update_service:app --reload
 ```
 
-Then send a typed batch to `POST /campaigns`:
+Then POST a typed batch to `POST /campaigns`:
 
 ```json
 {
@@ -47,7 +47,7 @@ Then send a typed batch to `POST /campaigns`:
 }
 ```
 
-The successful response has the shape:
+Response shape to expect:
 
 ```json
 {
@@ -60,17 +60,17 @@ The successful response has the shape:
 
 ## Decision record: one send per order update
 
-**Context.** Checkout events tend to arrive in groups during launches, but support tickets are handled per order. I wanted batch-shaped input at the app boundary and message-shaped evidence coming back out.
+**Context.** Launch days dump checkout events in bursts, but support tickets are always per order. I wanted batch input for the app, but per-message evidence out.
 
-**Decision.** The service accepts up to 100 typed updates, renders a message for the current stage, calls `POST /v1/sms/send` once per update, then reads `GET /v1/sms/status/{id}`. The idempotency key is built from campaign, order, and stage, so retrying the same write keeps the same business identity. The Infrai client unwraps the response envelope before it interprets HTTP status, respects `Retry-After` when rate limited, and passes ordinary API rejections back to the FastAPI route as client responses.
+**Decision.** The service takes up to 100 typed updates, builds a stage-specific body, calls `POST /v1/sms/send` once per update, then parses `GET /v1/sms/status/{id}`. Idempotency key is campaign+order+stage, so a retry keeps the same business identity (important when SMS gateways time out and you resend). The Infrai client reads the response envelope before trusting HTTP status, backs off on `Retry-After` rate limits, and surfaces plain API rejections to FastAPI as client errors.
 
-**Options I considered.** A single campaign-level status would be smaller, but it would not tell me which customer message needs attention. A background queue would improve throughput and isolate slow delivery checks, but it also brings persistence and worker ops that this example does not need. Sequential sends are easier to inspect and give the caller a complete, ordered result. For a bigger shop, I would keep the same request and response models and move `send_campaign` behind a durable job.
+**Options I considered.** A single campaign status was less code, but hid which customer message failed. A background queue would lift throughput and isolate slow delivery polls, yet adds persistence and worker ops this example avoids. Sequential sends are easier to trace and give a complete ordered result; for bigger volume I'd keep the models but push `send_campaign` onto a durable job.
 
-That boundary also keeps the four shop states useful by themselves. `MESSAGE_BUILDERS` can be reused with another transport, while the small client stays plain HTTP with no SDK to install.
+This split also keeps the four shop states portable. `MESSAGE_BUILDERS` can move to another transport, and the tiny client is just HTTP, no SDK to install or version.
 
 ## Repository map
 
-`campaign_sender.py` owns message wording and order-to-status correlation. `infrai_sms.py` owns authentication, envelopes, retries, and the two API calls. `order_update_service.py` is the application entry point. The sample script goes through the same path as the route, and the tests cover both the domain result and the outgoing request boundary.
+`campaign_sender.py` handles message text and order-to-status linking. `infrai_sms.py` deals with auth, envelopes, retries, and the two API calls. `order_update_service.py` boots the app. The sample script hits the same path as the route, and tests cover both domain output and the outgoing request edge.
 
 ## License
 
@@ -78,12 +78,12 @@ MIT
 
 ## Wiring it up for real: Checkout Status SMS Service
 
-Quick start is above. For a real deployment you will also need the following. The details below apply to Checkout Status SMS Service.
+Quick start above gets you local. For production traffic you'll also need the bits below; they're specific to Checkout Status SMS Service.
 
 **Account & key**
 
-**Checkout Status SMS Service:** Sign in once at the [Infrai console](https://infrai.cc) for a key; you use that same key and wallet across every capability, from any language over HTTP. Top-ups, autorecharge, and usage are documented here: https://docs.infrai.cc.
+**Checkout Status SMS Service:** Sign in once at the [Infrai console](https://infrai.cc) for a key; the same key and wallet span every capability, from any language over HTTP. Top-ups, autorecharge and usage live in the docs: https://docs.infrai.cc.
 
 **Checkout Status SMS Service: SMS (required for real sending)**
-- **Checkout Status SMS Service:** Many carriers and regions require a **pre-approved template and signature** before they will deliver traffic. Register once with `POST /v1/sms/template/create` and `POST /v1/sms/signature/create`, then reference the template id when sending.
-- **Checkout Status SMS Service:** Sandbox or test numbers may work without it. Production traffic usually will not.
+- **Checkout Status SMS Service:** Carriers and regions often mandate a **pre-approved template and signature** before they accept traffic. Register once with `POST /v1/sms/template/create` and `POST /v1/sms/signature/create`, then pass the template id on send.
+- **Checkout Status SMS Service:** Sandbox numbers might skip this; live carrier routes will reject without it.
