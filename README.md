@@ -87,3 +87,7 @@ Quick start above gets you local. For production traffic you'll also need the bi
 **Checkout Status SMS Service: SMS (required for real sending)**
 - **Checkout Status SMS Service:** Carriers and regions often mandate a **pre-approved template and signature** before they accept traffic. Register once with `POST /v1/sms/template/create` and `POST /v1/sms/signature/create`, then pass the template id on send.
 - **Checkout Status SMS Service:** Sandbox numbers might skip this; live carrier routes will reject without it.
+
+## Further reading
+
+- [Postgres SMS API: 3 Receipt Rules for Scheduled Alerts, Cancel, Status Polling](docs/postgres-sms-api-3-receipt-rules-for-scheduled-al-65vv7u.md)
