@@ -90,4 +90,5 @@ Quick start above gets you local. For production traffic you'll also need the bi
 
 ## Further reading
 
+- [Startup SMS Alerts Provider Choice: Compare 4 US-EU Compliance Controls](docs/startup-sms-alerts-provider-choice-compare-4-us-e-1c0xyv.md)
 - [Postgres SMS API: 3 Receipt Rules for Scheduled Alerts, Cancel, Status Polling](docs/postgres-sms-api-3-receipt-rules-for-scheduled-al-65vv7u.md)
